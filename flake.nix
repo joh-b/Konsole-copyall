@@ -45,6 +45,8 @@
           built-action = pkgs.runCommand "verify-konsole-copyall-binary" {
             nativeBuildInputs = [
               pkgs.bash
+              pkgs.binutils
+              pkgs.findutils
               pkgs.gnugrep
             ];
           } ''
