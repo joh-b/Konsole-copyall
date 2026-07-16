@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: cachix/install-nix-action@v31
         with:
@@ -40,7 +40,7 @@ jobs:
 
       - name: Configure Cachix
         if: steps.cache.outputs.enabled == 'true'
-        uses: cachix/cachix-action@v16
+        uses: cachix/cachix-action@v17
         with:
           name: ${{ vars.CACHIX_CACHE_NAME }}
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -68,7 +68,7 @@ jobs:
           } | tee build-metadata.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload build metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-metadata
           path: build-metadata.md
