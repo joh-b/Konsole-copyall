@@ -12,15 +12,16 @@ terminal session and copies it to the regular clipboard. It does not synthesize
 input, use D-Bus clipboard export, enable automatic copy-on-selection, or copy
 to the primary selection.
 
-No default shortcut is compiled into Konsole. Assign a shortcut such as
-`Ctrl+Alt+K` through Konsole's shortcut configuration after installing the
-package.
+No default shortcut is compiled into Konsole. Assign one through Konsole's
+shortcut configuration after installing the package.
 
 ## Source and package pin
 
 The production flake is locked to nixpkgs commit
 `8eeec934ae0dbeca3d7868c059568a65c08b2fc3` from `nixos-26.05`. That revision
-packages Konsole `26.04.3`. The source patch is intentionally limited to:
+packages [KDE Konsole `26.04.3`](https://github.com/KDE/konsole/tree/v26.04.3).
+This is an unofficial downstream modification. The source patch is
+intentionally limited to:
 
 - `src/terminalDisplay/TerminalDisplay.h`
 - `src/terminalDisplay/TerminalDisplay.cpp`
@@ -80,9 +81,8 @@ a binary-cache miss and local compilation.
 ## Runtime validation
 
 CI proves that the patch applies and compiles, but it cannot establish clipboard
-behavior in a particular Plasma Wayland session. Validate with an explicitly
-separate patched process so an already-running unpatched Konsole instance is not
-reused:
+behavior in a graphical desktop session. Validate with an explicitly separate
+patched process so an already-running unpatched Konsole instance is not reused:
 
 ```console
 ./result/bin/konsole --separate
@@ -98,5 +98,18 @@ by a finite history limit cannot be recovered.
 
 ## License
 
-The patch and repository are licensed under `GPL-2.0-or-later`, matching
-Konsole's modified source files. See `LICENSES/GPL-2.0-or-later.txt`.
+The patch and this repository's original material are licensed under
+`GPL-2.0-or-later`. Each modified file in Konsole `26.04.3` carries that same
+SPDX license identifier:
+
+- [`SessionController.cpp`](https://github.com/KDE/konsole/blob/v26.04.3/src/session/SessionController.cpp)
+- [`TerminalDisplay.cpp`](https://github.com/KDE/konsole/blob/v26.04.3/src/terminalDisplay/TerminalDisplay.cpp)
+- [`TerminalDisplay.h`](https://github.com/KDE/konsole/blob/v26.04.3/src/terminalDisplay/TerminalDisplay.h)
+
+The complete license text is in `LICENSES/GPL-2.0-or-later.txt`. This repository
+does not relicense Konsole or its dependencies; their existing copyright and
+license notices continue to apply.
+
+The corresponding source and build information for a cached binary consists of
+the pinned upstream source above, the patch in `patches/`, and the Nix build
+definition and lock file in this repository.

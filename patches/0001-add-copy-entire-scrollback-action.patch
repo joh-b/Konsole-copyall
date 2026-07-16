@@ -10,6 +10,8 @@ users can choose one without changing Konsole's upstream defaults.
 The implementation selects the same complete retained line range as the
 existing Select All operation, but copies only to the regular clipboard.  It
 does not invoke the primary-selection copy performed by selectAll().
+
+SPDX-License-Identifier: GPL-2.0-or-later
 ---
  src/session/SessionController.cpp            |  4 ++++
  src/terminalDisplay/TerminalDisplay.cpp      | 11 +++++++++++

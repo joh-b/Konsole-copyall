@@ -11,6 +11,7 @@ EXPECTED_PATHS = {
     "src/terminalDisplay/TerminalDisplay.cpp",
     "src/terminalDisplay/TerminalDisplay.h",
 }
+PATCH_LICENSE = "SPDX-License-Identifier: GPL-2.0-or-later"
 
 REQUIRED_ADDITIONS = (
     'QStringLiteral("copy-entire-scrollback")',
@@ -43,6 +44,10 @@ def main() -> None:
         fail("usage: verify-patch-content.py PATCH")
 
     text = Path(sys.argv[1]).read_text(encoding="utf-8")
+    preamble = text.split("\ndiff --git ", maxsplit=1)[0]
+    if PATCH_LICENSE not in preamble:
+        fail(f"patch preamble is missing {PATCH_LICENSE}")
+
     path_pairs = re.findall(r"^diff --git a/(\S+) b/(\S+)$", text, re.MULTILINE)
 
     if any(left != right for left, right in path_pairs):
