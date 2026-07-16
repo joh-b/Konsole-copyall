@@ -1,0 +1,81 @@
+From 2ec49edcf8b78c106756771fba51ac661ad7a8ab Mon Sep 17 00:00:00 2001
+From: joh-b <77800599+joh-b@users.noreply.github.com>
+Date: Thu, 16 Jul 2026 10:00:00 +0200
+Subject: [PATCH] Add action to copy the entire scrollback
+
+Add a dedicated terminal-display operation and expose it through the session
+action collection.  The action intentionally has no default shortcut so that
+users can choose one without changing Konsole's upstream defaults.
+
+The implementation selects the same complete retained line range as the
+existing Select All operation, but copies only to the regular clipboard.  It
+does not invoke the primary-selection copy performed by selectAll().
+---
+ src/session/SessionController.cpp            |  4 ++++
+ src/terminalDisplay/TerminalDisplay.cpp      | 11 +++++++++++
+ src/terminalDisplay/TerminalDisplay.h        |  3 +++
+ 3 files changed, 18 insertions(+)
+
+diff --git a/src/session/SessionController.cpp b/src/session/SessionController.cpp
+--- a/src/session/SessionController.cpp
++++ b/src/session/SessionController.cpp
+@@ -678,12 +678,16 @@ void SessionController::setupCommonActions()
+     // Copy and Paste
+     action = KStandardAction::copy(this, &SessionController::copy, collection);
+     QList<QKeySequence> copyShortcut;
+     copyShortcut.append(QKeySequence(Konsole::ACCEL | Qt::Key_C));
+     copyShortcut.append(QKeySequence(Qt::CTRL | Qt::Key_Insert));
+     collection->setDefaultShortcuts(action, copyShortcut);
+     // disabled at first, since nothing has been selected now
+     action->setEnabled(false);
+ 
++    action = collection->addAction(QStringLiteral("copy-entire-scrollback"), view(), &TerminalDisplay::copyAllToClipboard);
++    action->setText(i18n("Copy Entire Scrollback"));
++    action->setIcon(QIcon::fromTheme(QStringLiteral("edit-copy")));
++
+     // We need a different QAction on the context menu because one will be disabled when there's no selection,
+     // other will be hidden.
+     action = collection->addAction(QStringLiteral("edit_copy_contextmenu"));
+diff --git a/src/terminalDisplay/TerminalDisplay.cpp b/src/terminalDisplay/TerminalDisplay.cpp
+--- a/src/terminalDisplay/TerminalDisplay.cpp
++++ b/src/terminalDisplay/TerminalDisplay.cpp
+@@ -2499,10 +2499,21 @@ void TerminalDisplay::copyToClipboard(Screen::DecodingOptions options)
+     if (_copyTextAsHTML) {
+         mimeData->setHtml(_screenWindow->selectedText(currentDecodingOptions() | Screen::ConvertToHtml));
+     }
+ 
+     QApplication::clipboard()->setMimeData(mimeData, QClipboard::Clipboard);
+ }
+ 
++void TerminalDisplay::copyAllToClipboard()
++{
++    if (_screenWindow.isNull()) {
++        return;
++    }
++
++    _preserveLineBreaks = true;
++    _screenWindow->setSelectionByLineRange(0, _screenWindow->lineCount());
++    copyToClipboard();
++}
++
+ void TerminalDisplay::pasteFromClipboard(bool appendEnter)
+ {
+     QString text;
+diff --git a/src/terminalDisplay/TerminalDisplay.h b/src/terminalDisplay/TerminalDisplay.h
+--- a/src/terminalDisplay/TerminalDisplay.h
++++ b/src/terminalDisplay/TerminalDisplay.h
+@@ -452,9 +452,12 @@ public Q_SLOTS:
+     /** Copies the selected text to the X11 Selection. */
+     void copyToX11Selection(bool useSavedText = false);
+ 
+     /** Copies the selected text to the system clipboard. */
+     void copyToClipboard(Screen::DecodingOptions options = Screen::PlainText);
+ 
++    /** Copies the complete available scrollback to the system clipboard. */
++    void copyAllToClipboard();
++
+     /**
+      * Pastes the content of the clipboard into the display.
+      *
+-- 
+2.50.1

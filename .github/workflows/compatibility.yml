@@ -1,0 +1,36 @@
+name: Compatibility check
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      nixpkgs_ref:
+        description: Nixpkgs branch, tag, or commit to test
+        required: false
+        default: nixos-26.05
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compatibility
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update the temporary nixpkgs lock
+        env:
+          NIXPKGS_REF: ${{ inputs.nixpkgs_ref || 'nixos-26.05' }}
+        run: nix flake lock --override-input nixpkgs "github:NixOS/nixpkgs/$NIXPKGS_REF"
+
+      - name: Check patch compatibility and build
+        run: nix flake check --print-build-logs
