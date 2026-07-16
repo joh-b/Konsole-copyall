@@ -19,13 +19,7 @@ does not invoke the primary-selection copy performed by selectAll().
 diff --git a/src/session/SessionController.cpp b/src/session/SessionController.cpp
 --- a/src/session/SessionController.cpp
 +++ b/src/session/SessionController.cpp
-@@ -678,12 +678,16 @@ void SessionController::setupCommonActions()
-     // Copy and Paste
-     action = KStandardAction::copy(this, &SessionController::copy, collection);
-     QList<QKeySequence> copyShortcut;
-     copyShortcut.append(QKeySequence(Konsole::ACCEL | Qt::Key_C));
-     copyShortcut.append(QKeySequence(Qt::CTRL | Qt::Key_Insert));
-     collection->setDefaultShortcuts(action, copyShortcut);
+@@ -684,6 +684,10 @@ void SessionController::setupCommonActions()
      // disabled at first, since nothing has been selected now
      action->setEnabled(false);
  
@@ -39,11 +33,7 @@ diff --git a/src/session/SessionController.cpp b/src/session/SessionController.c
 diff --git a/src/terminalDisplay/TerminalDisplay.cpp b/src/terminalDisplay/TerminalDisplay.cpp
 --- a/src/terminalDisplay/TerminalDisplay.cpp
 +++ b/src/terminalDisplay/TerminalDisplay.cpp
-@@ -2499,10 +2499,21 @@ void TerminalDisplay::copyToClipboard(Screen::DecodingOptions options)
-     if (_copyTextAsHTML) {
-         mimeData->setHtml(_screenWindow->selectedText(currentDecodingOptions() | Screen::ConvertToHtml));
-     }
- 
+@@ -2503,6 +2503,17 @@ void TerminalDisplay::copyToClipboard(Screen::DecodingOptions options)
      QApplication::clipboard()->setMimeData(mimeData, QClipboard::Clipboard);
  }
  
@@ -64,10 +54,7 @@ diff --git a/src/terminalDisplay/TerminalDisplay.cpp b/src/terminalDisplay/Termi
 diff --git a/src/terminalDisplay/TerminalDisplay.h b/src/terminalDisplay/TerminalDisplay.h
 --- a/src/terminalDisplay/TerminalDisplay.h
 +++ b/src/terminalDisplay/TerminalDisplay.h
-@@ -452,9 +452,12 @@ public Q_SLOTS:
-     /** Copies the selected text to the X11 Selection. */
-     void copyToX11Selection(bool useSavedText = false);
- 
+@@ -455,6 +455,9 @@ public Q_SLOTS:
      /** Copies the selected text to the system clipboard. */
      void copyToClipboard(Screen::DecodingOptions options = Screen::PlainText);
  
