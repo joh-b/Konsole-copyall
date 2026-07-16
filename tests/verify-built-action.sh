@@ -15,9 +15,27 @@ if [[ ! -x "$result/bin/konsole" ]]; then
     exit 1
 fi
 
-for marker in 'copy-entire-scrollback' 'Copy Entire Scrollback'; do
-    if ! grep --recursive --binary-files=text --files-with-matches \
+contains_marker() {
+    local marker=$1
+    local file
+
+    if grep --recursive --binary-files=text --files-with-matches \
         --fixed-strings -- "$marker" "$result" >/dev/null; then
+        return 0
+    fi
+
+    while IFS= read -r -d '' file; do
+        if strings --all --encoding=l "$file" | \
+            grep --fixed-strings --line-regexp -- "$marker" >/dev/null; then
+            return 0
+        fi
+    done < <(find "$result" -type f -print0)
+
+    return 1
+}
+
+for marker in 'copy-entire-scrollback' 'Copy Entire Scrollback'; do
+    if ! contains_marker "$marker"; then
         printf 'built package does not contain marker: %s\n' "$marker" >&2
         exit 1
     fi
