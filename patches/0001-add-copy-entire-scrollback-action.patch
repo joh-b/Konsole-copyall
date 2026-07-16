@@ -23,7 +23,7 @@ diff --git a/src/session/SessionController.cpp b/src/session/SessionController.c
      // disabled at first, since nothing has been selected now
      action->setEnabled(false);
  
-+    action = collection->addAction(QStringLiteral("copy-entire-scrollback"), view(), &TerminalDisplay::copyAllToClipboard);
++    action = collection->addAction(QStringLiteral("copy-entire-scrollback"), view().data(), &TerminalDisplay::copyAllToClipboard);
 +    action->setText(i18n("Copy Entire Scrollback"));
 +    action->setIcon(QIcon::fromTheme(QStringLiteral("edit-copy")));
 +

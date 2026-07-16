@@ -69,7 +69,7 @@ def main() -> None:
 
     action_registration = re.compile(
         r'addAction\(QStringLiteral\("copy-entire-scrollback"\),\s*'
-        r"view\(\),\s*&TerminalDisplay::copyAllToClipboard\)"
+        r"view\(\)\.data\(\),\s*&TerminalDisplay::copyAllToClipboard\)"
     )
     if not action_registration.search(additions):
         fail("the action is not connected directly to the active TerminalDisplay")
