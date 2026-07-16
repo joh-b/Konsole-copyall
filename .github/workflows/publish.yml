@@ -51,6 +51,14 @@ jobs:
       - name: Build the default package explicitly
         run: nix build .#default --print-build-logs
 
+      - name: Publish the complete default closure
+        if: steps.cache.outputs.enabled == 'true'
+        env:
+          CACHE_NAME: ${{ vars.CACHIX_CACHE_NAME }}
+        run: |
+          set -Eeuo pipefail
+          cachix push "$CACHE_NAME" "$(readlink -f result)"
+
       - name: Record build metadata
         run: |
           result_path=$(readlink -f result)

@@ -34,11 +34,16 @@ contains_marker() {
     return 1
 }
 
-for marker in 'copy-entire-scrollback' 'Copy Entire Scrollback'; do
+for marker in \
+    'copy-entire-scrollback' \
+    'Copy Entire Scrollback' \
+    'konsole-custom' \
+    'org.kde.konsole-custom'
+do
     if ! contains_marker "$marker"; then
         printf 'built package does not contain marker: %s\n' "$marker" >&2
         exit 1
     fi
 done
 
-printf 'Built Konsole contains the copy-all action markers\n'
+printf 'Built Konsole contains the copy-all action and custom identity markers\n'

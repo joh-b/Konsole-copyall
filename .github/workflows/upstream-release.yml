@@ -1,0 +1,155 @@
+name: Track upstream releases
+
+on:
+  schedule:
+    - cron: "37 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-release
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect a newer stable Konsole tag
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          current=$(jq --exit-status --raw-output '.version' nix/upstream.json)
+          tag=$(
+            gh api --paginate 'repos/KDE/konsole/tags?per_page=100' \
+              --jq '.[].name' \
+              | python3 scripts/select_latest_stable_tag.py --current "$current"
+          )
+
+          if [[ -z "$tag" ]]; then
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo "No stable Konsole tag is newer than $current." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          version=${tag#v}
+          url="https://download.kde.org/stable/release-service/$version/src/konsole-$version.tar.xz"
+          {
+            echo 'available=true'
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "url=$url"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Found stable Konsole release $tag." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require Cachix publication settings
+        if: steps.release.outputs.available == 'true'
+        env:
+          CACHE_NAME: ${{ vars.CACHIX_CACHE_NAME }}
+          AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "$CACHE_NAME" || -z "$AUTH_TOKEN" ]]; then
+            echo '::error::A new upstream release was found, but CACHIX_CACHE_NAME or CACHIX_AUTH_TOKEN is missing.'
+            exit 1
+          fi
+
+      - name: Prefetch and pin the upstream source
+        if: steps.release.outputs.available == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          URL: ${{ steps.release.outputs.url }}
+        run: |
+          set -Eeuo pipefail
+
+          metadata=$(nix store prefetch-file --json "$URL")
+          hash=$(jq --exit-status --raw-output '.hash' <<< "$metadata")
+
+          jq \
+            --arg version "$VERSION" \
+            --arg tag "$TAG" \
+            --arg url "$URL" \
+            --arg hash "$hash" \
+            '{ version: $version, tag: $tag, url: $url, hash: $hash }' \
+            nix/upstream.json > nix/upstream.json.next
+          mv nix/upstream.json.next nix/upstream.json
+
+          nix flake update nixpkgs
+
+          git diff --check
+          if git diff --exit-code --quiet; then
+            echo '::error::The detected release did not change nix/upstream.json.'
+            exit 1
+          fi
+
+      - name: Configure Cachix
+        if: steps.release.outputs.available == 'true'
+        uses: cachix/cachix-action@v17
+        with:
+          name: ${{ vars.CACHIX_CACHE_NAME }}
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Check the new upstream release
+        if: steps.release.outputs.available == 'true'
+        run: nix flake check --print-build-logs
+
+      - name: Build the public package
+        if: steps.release.outputs.available == 'true'
+        run: nix build .#default --print-build-logs
+
+      - name: Verify the built version
+        if: steps.release.outputs.available == 'true'
+        env:
+          EXPECTED_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+
+          actual=$(nix eval --raw .#packages.x86_64-linux.patched-konsole.version)
+          if [[ "$actual" != "$EXPECTED_VERSION" ]]; then
+            echo "::error::Built Konsole version $actual does not match $EXPECTED_VERSION."
+            exit 1
+          fi
+
+      - name: Publish the verified closure
+        if: steps.release.outputs.available == 'true'
+        env:
+          CACHE_NAME: ${{ vars.CACHIX_CACHE_NAME }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+
+          store_path=$(readlink -f result)
+          cachix push "$CACHE_NAME" "$store_path"
+          {
+            echo "Built and published Konsole $VERSION."
+            echo
+            echo "Public package store path: $store_path"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the verified upstream release on main
+        if: steps.release.outputs.available == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add flake.lock nix/upstream.json
+          git commit -m "Update Konsole upstream to $VERSION"
+          git push origin HEAD:main
