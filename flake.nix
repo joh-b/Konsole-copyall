@@ -1,5 +1,5 @@
 {
-  description = "Konsole with a native Copy Entire Scrollback action";
+  description = "An isolated Konsole Custom launcher with a native Copy Entire Scrollback action";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
@@ -17,11 +17,16 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
-          konsoleCopyall = pkgs.callPackage ./nix/package.nix { };
+          patchedKonsole = pkgs.callPackage ./nix/package.nix { };
+          konsoleCustom = pkgs.callPackage ./nix/konsole-custom.nix {
+            inherit patchedKonsole;
+          };
         in
         {
-          "konsole-copy-entire-scrollback" = konsoleCopyall;
-          default = konsoleCopyall;
+          "patched-konsole" = patchedKonsole;
+          "konsole-copy-entire-scrollback" = patchedKonsole;
+          "konsole-custom" = konsoleCustom;
+          default = konsoleCustom;
         }
       );
 
@@ -30,6 +35,7 @@
         let
           pkgs = import nixpkgs { inherit system; };
           package = self.packages.${system}.default;
+          patchedKonsole = self.packages.${system}."patched-konsole";
         in
         {
           inherit package;
@@ -42,6 +48,14 @@
             touch "$out"
           '';
 
+          identity-patch-content = pkgs.runCommand "verify-konsole-custom-identity-patch" {
+            nativeBuildInputs = [ pkgs.python3 ];
+          } ''
+            python3 ${./tests/verify-identity-patch.py} \
+              ${./patches/0002-use-konsole-custom-identity.patch}
+            touch "$out"
+          '';
+
           built-action = pkgs.runCommand "verify-konsole-copyall-binary" {
             nativeBuildInputs = [
               pkgs.bash
@@ -50,7 +64,32 @@
               pkgs.gnugrep
             ];
           } ''
-            ${pkgs.bash}/bin/bash ${./tests/verify-built-action.sh} ${package}
+            ${pkgs.bash}/bin/bash ${./tests/verify-built-action.sh} ${patchedKonsole}
+            touch "$out"
+          '';
+
+          public-interface = pkgs.runCommand "verify-konsole-custom-public-interface" {
+            nativeBuildInputs = [
+              pkgs.desktop-file-utils
+              pkgs.findutils
+              pkgs.gnugrep
+            ];
+          } ''
+            ${pkgs.bash}/bin/bash ${./tests/verify-public-interface.sh} \
+              ${package} ${patchedKonsole}
+            touch "$out"
+          '';
+
+          upstream-tracker = pkgs.runCommand "verify-konsole-upstream-tracker" {
+            nativeBuildInputs = [ pkgs.python3 ];
+          } ''
+            SELECTOR_SCRIPT=${./scripts/select_latest_stable_tag.py} \
+              python3 ${./tests/test-select-latest-stable-tag.py}
+            python3 ${./tests/verify-upstream-metadata.py} \
+              ${./nix/upstream.json}
+            python3 ${./tests/verify-upstream-workflow.py} \
+              ${./.github/workflows/upstream-release.yml} \
+              ${./.github/workflows/publish.yml}
             touch "$out"
           '';
         }

@@ -1,0 +1,47 @@
+From: Konsole Copy All contributors
+Subject: [PATCH] Use an isolated desktop and D-Bus identity
+
+Keep Konsole's executable, application name, and resource layout intact for
+upstream compatibility, while separating the public desktop and single-instance
+D-Bus identity from a system Konsole installation.
+
+SPDX-License-Identifier: GPL-2.0-or-later
+---
+ src/main.cpp | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/main.cpp b/src/main.cpp
+index aea3dc02..38d262b3 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
+     KLocalizedString::setApplicationDomain("konsole");
+ 
+     KAboutData about(QStringLiteral("konsole"),
+-                     i18nc("@title", "Konsole"),
++                     i18nc("@title", "Konsole Custom"),
+                      QStringLiteral(KONSOLE_VERSION),
+                      i18nc("@title", "Terminal emulator"),
+                      KAboutLicense::GPL_V2,
+@@ -194,6 +194,7 @@ int main(int argc, char *argv[])
+                      QString(),
+                      QStringLiteral("https://konsole.kde.org/"));
+     fillAboutData(about);
++    about.setDesktopFileName(QStringLiteral("org.kde.konsole-custom"));
+ 
+     KAboutData::setApplicationData(about);
+ 
+@@ -248,7 +249,13 @@ int main(int argc, char *argv[])
+     atexit(deleteQApplication);
+     // Ensure that we only launch a new instance if we need to
+     // If there is already an instance running, we will quit here
++    // KDBusService snapshots the application name during construction. Use the
++    // downstream name only while it registers; Konsole uses its permanent
++    // application name to distinguish the full application from KParts.
++    const QString upstreamApplicationName = QCoreApplication::applicationName();
++    QCoreApplication::setApplicationName(QStringLiteral("konsole-custom"));
+     KDBusService dbusService(startupOption | KDBusService::NoExitOnFailure);
++    QCoreApplication::setApplicationName(upstreamApplicationName);
+ 
+     needToDeleteQApplication = false;
+ #endif

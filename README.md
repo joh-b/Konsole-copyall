@@ -1,6 +1,7 @@
-# Konsole Copy All
+# Konsole Custom — Copy All
 
-This repository packages Konsole with one additional native action:
+This repository packages an isolated `konsole-custom` launcher with one
+additional native Konsole action:
 
 ```text
 Copy Entire Scrollback
@@ -12,17 +13,35 @@ terminal session and copies it to the regular clipboard. It does not synthesize
 input, use D-Bus clipboard export, enable automatic copy-on-selection, or copy
 to the primary selection.
 
-No default shortcut is compiled into Konsole. Assign one through Konsole's
-shortcut configuration after installing the package.
+No default shortcut is compiled into Konsole. Assign one through Konsole
+Custom's shortcut configuration after installing the package.
+
+The public package does not install `bin/konsole` or
+`org.kde.konsole.desktop`, so it does not shadow a system Konsole package. It
+provides exactly these public entry points:
+
+```text
+bin/konsole-custom
+share/applications/org.kde.konsole-custom.desktop
+```
+
+The patched application uses `org.kde.konsole-custom` as its desktop identity
+and D-Bus service base name, so its service is separate from the one used by a
+system Konsole. A unique desktop-launched instance registers exactly that name;
+upstream's multiple-instance mode appends the process ID. It deliberately
+retains upstream's internal application name and `bin/konsole` layout: Konsole
+uses that application name to distinguish the full terminal from an embedded
+KPart. The non-shadowing public wrapper is the only package intended for normal
+installation.
 
 ## Source and package pin
 
-The production flake is locked to nixpkgs commit
-`8eeec934ae0dbeca3d7868c059568a65c08b2fc3` from `nixos-26.05`. That revision
-packages [KDE Konsole `26.04.3`](https://github.com/KDE/konsole/tree/v26.04.3).
-This is an unofficial downstream modification. The source patch is
-intentionally limited to:
+The production dependency set is pinned by `flake.lock`. The Konsole release,
+source URL, and source hash are pinned separately in `nix/upstream.json`, so a
+consumer and CI evaluate the same derivation. This is an unofficial downstream
+modification. The source patches are intentionally limited to:
 
+- `src/main.cpp`
 - `src/terminalDisplay/TerminalDisplay.h`
 - `src/terminalDisplay/TerminalDisplay.cpp`
 - `src/session/SessionController.cpp`
@@ -31,8 +50,15 @@ The flake exports:
 
 ```text
 packages.x86_64-linux.konsole-copy-entire-scrollback
+packages.x86_64-linux.patched-konsole
+packages.x86_64-linux.konsole-custom
 packages.x86_64-linux.default
 ```
+
+`default` and `konsole-custom` are the non-shadowing public package.
+`patched-konsole` and the compatibility alias
+`konsole-copy-entire-scrollback` expose the internal upstream-layout package for
+development and validation.
 
 ## Build
 
@@ -41,10 +67,33 @@ nix flake check
 nix build .#default
 ```
 
-`nix flake check` verifies the patch structure, builds the patched package, and
-checks the installed result for both the action identifier and its visible
-label. A weekly compatibility workflow tries the latest `nixos-26.05` revision
-without changing the production lock file.
+`nix flake check` verifies both patches, builds the patched package, checks its
+compiled action and identity markers, and asserts that the public output
+contains only `konsole-custom` and its separate desktop entry. The desktop
+check specifically requires an absolute `Exec=…/konsole-custom --new-tab`
+action. A weekly compatibility workflow tries the latest `nixos-26.05`
+revision without changing the production lock file.
+
+## Upstream release tracking
+
+The nightly **Track upstream releases** workflow reads tags from the official
+`KDE/konsole` repository. It ignores malformed tags and KDE beta/RC tags,
+prefetches the stable release tarball, records its content hash, refreshes the
+locked nixpkgs revision, then runs the complete flake check and public-package
+build. The Cachix action is configured as pull-only while validation runs. When
+and only when all checks succeed, the workflow explicitly pushes the complete
+result closure to the configured Cachix cache and commits the verified
+`nix/upstream.json` and `flake.lock` updates to `main`.
+
+An incompatible patch, missing release tarball, missing Cachix setting, build
+failure, or concurrent change to `main` prevents the version update. The next
+nightly run tries again. Because the tracker performs the build and publication
+itself, it does not depend on a second workflow being triggered by its
+`GITHUB_TOKEN` commit.
+
+The repository's Actions policy and branch rules must permit the workflow token
+to update `main`. If they do not, the verified closure is still cached, but the
+final push fails and the pinned version remains unchanged.
 
 ## Binary cache publication
 
@@ -56,7 +105,8 @@ closure to Cachix, configure both of these repository settings:
 
 Without both values, the workflow still validates and builds the package but
 reports that publication was skipped. A GitHub Actions cache or build artifact
-is not a Nix substituter.
+is not a Nix substituter. When both settings exist, the workflow explicitly
+pushes the default package and its complete runtime closure.
 
 Consumers must configure the resulting Cachix URL and public signing key as
 trusted substituter settings. The cache page supplies the exact public key;
@@ -72,11 +122,18 @@ consumer input:
 inputs.konsole-copyall.url = "github:joh-b/Konsole-copyall";
 
 # Later, where packages are selected:
-inputs.konsole-copyall.packages.${pkgs.system}.default
+konsoleCustom =
+  inputs.konsole-copyall.packages.${pkgs.stdenv.hostPlatform.system}.default;
 ```
 
 Changing the nixpkgs input produces a different derivation and normally causes
 a binary-cache miss and local compilation.
+
+Installing that package makes `org.kde.konsole-custom.desktop` available to the
+desktop environment. Plasma panel configuration can refer to it as
+`applications:org.kde.konsole-custom.desktop`; the package supplies the desktop
+entry, while the choice to pin it to a particular panel remains local desktop
+state.
 
 ## Runtime validation
 
@@ -85,7 +142,7 @@ behavior in a graphical desktop session. Validate with an explicitly separate
 patched process so an already-running unpatched Konsole instance is not reused:
 
 ```console
-./result/bin/konsole --separate
+./result/bin/konsole-custom --separate
 ```
 
 In that process, confirm that **Copy Entire Scrollback** appears in
@@ -98,18 +155,19 @@ by a finite history limit cannot be recovered.
 
 ## License
 
-The patch and this repository's original material are licensed under
-`GPL-2.0-or-later`. Each modified file in Konsole `26.04.3` carries that same
-SPDX license identifier:
+The patches and this repository's original material are licensed under
+`GPL-2.0-or-later`. Every modified upstream source file must carry that same
+SPDX identifier or the build stops before applying a patch:
 
-- [`SessionController.cpp`](https://github.com/KDE/konsole/blob/v26.04.3/src/session/SessionController.cpp)
-- [`TerminalDisplay.cpp`](https://github.com/KDE/konsole/blob/v26.04.3/src/terminalDisplay/TerminalDisplay.cpp)
-- [`TerminalDisplay.h`](https://github.com/KDE/konsole/blob/v26.04.3/src/terminalDisplay/TerminalDisplay.h)
+- [`main.cpp`](https://github.com/KDE/konsole/blob/master/src/main.cpp)
+- [`SessionController.cpp`](https://github.com/KDE/konsole/blob/master/src/session/SessionController.cpp)
+- [`TerminalDisplay.cpp`](https://github.com/KDE/konsole/blob/master/src/terminalDisplay/TerminalDisplay.cpp)
+- [`TerminalDisplay.h`](https://github.com/KDE/konsole/blob/master/src/terminalDisplay/TerminalDisplay.h)
 
 The complete license text is in `LICENSES/GPL-2.0-or-later.txt`. This repository
 does not relicense Konsole or its dependencies; their existing copyright and
 license notices continue to apply.
 
 The corresponding source and build information for a cached binary consists of
-the pinned upstream source above, the patch in `patches/`, and the Nix build
+the pinned upstream source above, the patches in `patches/`, and the Nix build
 definition and lock file in this repository.
