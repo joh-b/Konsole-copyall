@@ -88,7 +88,8 @@
             python3 ${./tests/verify-upstream-metadata.py} \
               ${./nix/upstream.json}
             python3 ${./tests/verify-upstream-workflow.py} \
-              ${./.github/workflows/upstream-release.yml}
+              ${./.github/workflows/upstream-release.yml} \
+              ${./.github/workflows/publish.yml}
             touch "$out"
           '';
         }

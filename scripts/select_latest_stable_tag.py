@@ -7,7 +7,9 @@ import sys
 from collections.abc import Iterable
 
 
-STABLE_TAG = re.compile(r"^v(?P<year>\d{2})\.(?P<cycle>\d{2})\.(?P<patch>\d+)$")
+STABLE_TAG = re.compile(
+    r"^v(?P<year>\d{2})\.(?P<cycle>\d{2})\.(?P<patch>0|[1-9]\d*)$"
+)
 FIRST_PRERELEASE_PATCH = 50
 
 

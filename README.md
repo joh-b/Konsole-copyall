@@ -26,11 +26,13 @@ share/applications/org.kde.konsole-custom.desktop
 ```
 
 The patched application uses `org.kde.konsole-custom` as its desktop identity
-and D-Bus service name, so its single-instance service is separate from the one
-used by a system Konsole. It deliberately retains upstream's internal
-application name and `bin/konsole` layout: Konsole uses that application name
-to distinguish the full terminal from an embedded KPart. The non-shadowing
-public wrapper is the only package intended for normal installation.
+and D-Bus service base name, so its service is separate from the one used by a
+system Konsole. A unique desktop-launched instance registers exactly that name;
+upstream's multiple-instance mode appends the process ID. It deliberately
+retains upstream's internal application name and `bin/konsole` layout: Konsole
+uses that application name to distinguish the full terminal from an embedded
+KPart. The non-shadowing public wrapper is the only package intended for normal
+installation.
 
 ## Source and package pin
 
@@ -78,9 +80,10 @@ The nightly **Track upstream releases** workflow reads tags from the official
 `KDE/konsole` repository. It ignores malformed tags and KDE beta/RC tags,
 prefetches the stable release tarball, records its content hash, refreshes the
 locked nixpkgs revision, then runs the complete flake check and public-package
-build. When and only when those steps succeed, the workflow explicitly pushes
-the complete result closure to the configured Cachix cache and commits the
-verified `nix/upstream.json` and `flake.lock` updates to `main`.
+build. The Cachix action is configured as pull-only while validation runs. When
+and only when all checks succeed, the workflow explicitly pushes the complete
+result closure to the configured Cachix cache and commits the verified
+`nix/upstream.json` and `flake.lock` updates to `main`.
 
 An incompatible patch, missing release tarball, missing Cachix setting, build
 failure, or concurrent change to `main` prevents the version update. The next
@@ -119,7 +122,8 @@ consumer input:
 inputs.konsole-copyall.url = "github:joh-b/Konsole-copyall";
 
 # Later, where packages are selected:
-konsoleCustom = inputs.konsole-copyall.packages.${pkgs.system}.default;
+konsoleCustom =
+  inputs.konsole-copyall.packages.${pkgs.stdenv.hostPlatform.system}.default;
 ```
 
 Changing the nixpkgs input produces a different derivation and normally causes
@@ -165,5 +169,5 @@ does not relicense Konsole or its dependencies; their existing copyright and
 license notices continue to apply.
 
 The corresponding source and build information for a cached binary consists of
-the pinned upstream source above, the patch in `patches/`, and the Nix build
+the pinned upstream source above, the patches in `patches/`, and the Nix build
 definition and lock file in this repository.

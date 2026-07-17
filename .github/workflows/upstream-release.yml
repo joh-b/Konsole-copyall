@@ -103,6 +103,9 @@ jobs:
         with:
           name: ${{ vars.CACHIX_CACHE_NAME }}
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          # Keep this action pull-only. Publication is deliberately gated by
+          # the checks below and performed by the explicit cachix push step.
+          skipPush: true
 
       - name: Check the new upstream release
         if: steps.release.outputs.available == 'true'

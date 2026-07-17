@@ -36,6 +36,10 @@ class SelectLatestStableTagTests(unittest.TestCase):
         ]
         self.assertEqual(MODULE.newest_stable_tag(tags, "v26.04.3"), "v26.04.4")
 
+    def test_rejects_noncanonical_patch_components(self) -> None:
+        self.assertIsNone(MODULE.parse_stable_tag("v26.04.04"))
+        self.assertIsNone(MODULE.parse_stable_tag("v26.04.00"))
+
     def test_returns_none_when_current_is_latest(self) -> None:
         tags = ["v26.04.3", "v26.04.2", "v25.12.3"]
         self.assertIsNone(MODULE.newest_stable_tag(tags, "26.04.3"))

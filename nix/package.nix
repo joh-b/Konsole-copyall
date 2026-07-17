@@ -32,6 +32,13 @@ kdePackages.konsole.overrideAttrs (oldAttrs: {
     ../patches/0002-use-konsole-custom-identity.patch
   ];
 
+  # A tracker update must fail instead of applying either downstream or
+  # nixpkgs patches to merely similar source context.
+  patchFlags = [
+    "-p1"
+    "--fuzz=0"
+  ];
+
   passthru = (oldAttrs.passthru or { }) // {
     copyEntireScrollbackAction = true;
     inherit upstream;

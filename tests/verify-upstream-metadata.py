@@ -7,7 +7,7 @@ import re
 import sys
 
 
-VERSION = re.compile(r"^\d{2}\.\d{2}\.\d+$")
+VERSION = re.compile(r"^\d{2}\.\d{2}\.(?:0|[1-9]\d*)$")
 SRI_HASH = re.compile(r"^sha256-[A-Za-z0-9+/]{43}=$")
 
 
