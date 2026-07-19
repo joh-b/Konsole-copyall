@@ -1,0 +1,49 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "timezone": "Europe/Berlin",
+  "enabledManagers": [
+    "nix"
+  ],
+  "nix": {
+    "enabled": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 5am on monday"
+    ],
+    "automerge": true,
+    "automergeType": "pr",
+    "platformAutomerge": false,
+    "commitMessageAction": "Update",
+    "commitMessageTopic": "flake.lock for the current NixOS stable branch"
+  },
+  "packageRules": [
+    {
+      "description": "Leave stable-release promotion to the official-release workflow",
+      "matchManagers": [
+        "nix"
+      ],
+      "matchPackageNames": [
+        "https://github.com/NixOS/nixpkgs"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Allow verified weekly lock-file maintenance",
+      "matchManagers": [
+        "nix"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "enabled": true,
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false
+    }
+  ]
+}

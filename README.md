@@ -71,8 +71,27 @@ nix build .#default
 compiled action and identity markers, and asserts that the public output
 contains only `konsole-custom` and its separate desktop entry. The desktop
 check specifically requires an absolute `Exec=…/konsole-custom --new-tab`
-action. A weekly compatibility workflow tries the latest `nixos-26.05`
-revision without changing the production lock file.
+action. A weekly compatibility workflow can also test an explicitly supplied
+nixpkgs ref without changing the production lock file.
+
+## NixOS stable maintenance
+
+The flake always selects a numbered final NixOS stable branch. Renovate refreshes
+`flake.lock` from that same branch weekly and merges the maintenance PR only
+after repository checks pass. Ordinary Renovate input updates are disabled so a
+newly created pre-release branch cannot change the selected release early.
+
+The daily **Promote latest NixOS stable** workflow separately reads official
+`NixOS/nixpkgs` tags and accepts only final `YY.05` or `YY.11` tags. When a newer
+final release exists, it updates `flake.nix`, the compatibility-workflow default,
+and `flake.lock` together on a pull-request branch. It dispatches the complete
+**Check** workflow for that exact commit and merges the PR only if the check and
+explicit default-package build pass. It then dispatches the publish workflow for
+the resulting `main` revision.
+
+Renovate must be installed for this repository. The release-transition workflow
+uses only the repository's `GITHUB_TOKEN`; repository Actions settings must allow
+workflows to create and merge pull requests.
 
 ## Upstream release tracking
 

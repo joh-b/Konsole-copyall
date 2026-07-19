@@ -29,8 +29,10 @@ jobs:
 
       - name: Update the temporary nixpkgs lock
         env:
-          NIXPKGS_REF: ${{ inputs.nixpkgs_ref || 'nixos-26.05' }}
-        run: nix flake lock --override-input nixpkgs "github:NixOS/nixpkgs/$NIXPKGS_REF"
+          REQUESTED_NIXPKGS_REF: ${{ inputs.nixpkgs_ref }}
+        run: |
+          nixpkgs_ref=${REQUESTED_NIXPKGS_REF:-$(jq --raw-output '.nodes.nixpkgs.original.ref' flake.lock)}
+          nix flake lock --override-input nixpkgs "github:NixOS/nixpkgs/$nixpkgs_ref"
 
       - name: Check patch compatibility and build
         run: nix flake check --print-build-logs

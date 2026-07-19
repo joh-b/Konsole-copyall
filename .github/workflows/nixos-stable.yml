@@ -1,0 +1,179 @@
+name: Promote latest NixOS stable
+
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nixos-stable-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Detect a newly released NixOS stable version
+        id: release
+        run: |
+          set -Eeuo pipefail
+
+          current=$(sed -nE 's@.*github:NixOS/nixpkgs/nixos-([0-9]{2}\.(05|11)).*@\1@p' flake.nix)
+          if [[ ! "$current" =~ ^[0-9]{2}\.(05|11)$ ]]; then
+            echo '::error::flake.nix must contain exactly one numbered stable nixpkgs branch.'
+            exit 1
+          fi
+
+          latest=$(
+            gh api --paginate 'repos/NixOS/nixpkgs/tags?per_page=100' \
+              --jq '.[].name' \
+              | python3 scripts/select_latest_nixos_stable.py --current "$current"
+          )
+          if [[ -z "$latest" ]]; then
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo "NixOS $current is still the newest final stable release." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo 'available=true'
+            echo "current=$current"
+            echo "version=$latest"
+          } >> "$GITHUB_OUTPUT"
+          echo "Found final NixOS release $latest; current selection is $current." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: cachix/install-nix-action@v31
+        if: steps.release.outputs.available == 'true'
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare the stable-release transition
+        if: steps.release.outputs.available == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+
+          python3 scripts/update_nixos_stable.py "$VERSION"
+          nix flake update nixpkgs
+
+          expected="nixos-$VERSION"
+          actual=$(jq --exit-status --raw-output '.nodes.nixpkgs.original.ref' flake.lock)
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::flake.lock follows $actual instead of $expected."
+            exit 1
+          fi
+          git diff --check
+
+      - name: Push the transition branch
+        if: steps.release.outputs.available == 'true'
+        id: branch
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+
+          branch="automation/nixos-stable-$VERSION"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add flake.nix flake.lock .github/workflows/compatibility.yml
+          git commit -m "Update NixOS stable to $VERSION"
+
+          remote_sha=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
+          if [[ -n "$remote_sha" ]]; then
+            git push \
+              --force-with-lease="refs/heads/$branch:$remote_sha" \
+              origin "HEAD:refs/heads/$branch"
+          else
+            git push origin "HEAD:refs/heads/$branch"
+          fi
+
+          {
+            echo "name=$branch"
+            echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open the stable-transition pull request
+        if: steps.release.outputs.available == 'true'
+        id: pull-request
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+
+          number=$(
+            gh pr list --base main --head "$BRANCH" --state open \
+              --json number --jq '.[0].number // empty'
+          )
+          if [[ -z "$number" ]]; then
+            url=$(gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "Update NixOS stable to $VERSION" \
+              --body "Promote the flake to the newly published final NixOS $VERSION release. The lock file and compatibility default are updated together; this PR is merged only after the full Check workflow passes.")
+            number=${url##*/}
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Run the full PR check
+        if: steps.release.outputs.available == 'true'
+        id: check
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+          HEAD_SHA: ${{ steps.branch.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+
+          gh workflow run check.yml --ref "$BRANCH"
+          run_id=''
+          for _ in {1..24}; do
+            run_id=$(gh run list \
+              --workflow check.yml \
+              --branch "$BRANCH" \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,headSha \
+              --jq "map(select(.headSha == \"$HEAD_SHA\"))[0].databaseId // empty")
+            [[ -n "$run_id" ]] && break
+            sleep 5
+          done
+          if [[ -z "$run_id" ]]; then
+            echo '::error::The dispatched Check workflow run was not found.'
+            exit 1
+          fi
+
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          gh run watch "$run_id" --exit-status
+
+      - name: Merge the verified stable transition
+        if: steps.release.outputs.available == 'true'
+        env:
+          HEAD_SHA: ${{ steps.branch.outputs.sha }}
+          PR_NUMBER: ${{ steps.pull-request.outputs.number }}
+        run: |
+          set -Eeuo pipefail
+
+          gh pr merge "$PR_NUMBER" \
+            --squash \
+            --delete-branch \
+            --match-head-commit "$HEAD_SHA"
+          echo "Merged verified NixOS ${{ steps.release.outputs.version }} transition in PR #$PR_NUMBER." \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the new main revision
+        if: steps.release.outputs.available == 'true'
+        run: gh workflow run publish.yml --ref main
