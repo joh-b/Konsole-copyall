@@ -11,7 +11,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: nixos-stable-promotion
+  group: nixpkgs-updates
   cancel-in-progress: false
 
 jobs:
@@ -104,6 +104,7 @@ jobs:
           {
             echo "name=$branch"
             echo "sha=$(git rev-parse HEAD)"
+            echo "base_sha=$(git rev-parse HEAD^)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Open the stable-transition pull request
@@ -116,8 +117,9 @@ jobs:
           set -Eeuo pipefail
 
           number=$(
-            gh pr list --base main --head "$BRANCH" --state open \
-              --json number --jq '.[0].number // empty'
+            gh pr list --base main --head "$BRANCH" --state all \
+              --json number,state \
+              --jq 'map(select(.state != "MERGED"))[0].number // empty'
           )
           if [[ -z "$number" ]]; then
             url=$(gh pr create \
@@ -126,6 +128,8 @@ jobs:
               --title "Update NixOS stable to $VERSION" \
               --body "Promote the flake to the newly published final NixOS $VERSION release. The lock file and compatibility default are updated together; this PR is merged only after the full Check workflow passes.")
             number=${url##*/}
+          elif [[ $(gh pr view "$number" --json state --jq .state) == 'CLOSED' ]]; then
+            gh pr reopen "$number"
           fi
           echo "number=$number" >> "$GITHUB_OUTPUT"
 
@@ -162,10 +166,17 @@ jobs:
       - name: Merge the verified stable transition
         if: steps.release.outputs.available == 'true'
         env:
+          BASE_SHA: ${{ steps.branch.outputs.base_sha }}
           HEAD_SHA: ${{ steps.branch.outputs.sha }}
           PR_NUMBER: ${{ steps.pull-request.outputs.number }}
         run: |
           set -Eeuo pipefail
+
+          current_main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [[ "$current_main" != "$BASE_SHA" ]]; then
+            echo '::error::Main moved after the stable transition was tested; the next run will rebuild it.'
+            exit 1
+          fi
 
           gh pr merge "$PR_NUMBER" \
             --squash \
@@ -174,6 +185,57 @@ jobs:
           echo "Merged verified NixOS ${{ steps.release.outputs.version }} transition in PR #$PR_NUMBER." \
             >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish the new main revision
-        if: steps.release.outputs.available == 'true'
-        run: gh workflow run publish.yml --ref main
+      - name: Ensure the current main revision is published
+        run: |
+          set -Eeuo pipefail
+
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          successful_run=$(
+            gh run list \
+              --workflow publish.yml \
+              --commit "$main_sha" \
+              --limit 20 \
+              --json databaseId,conclusion \
+              --jq 'map(select(.conclusion == "success"))[0].databaseId // empty'
+          )
+          if [[ -n "$successful_run" ]]; then
+            echo "Main $main_sha already passed publish run $successful_run." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          active_run=$(
+            gh run list \
+              --workflow publish.yml \
+              --commit "$main_sha" \
+              --limit 20 \
+              --json databaseId,status \
+              --jq 'map(select(.status != "completed"))[0].databaseId // empty'
+          )
+          if [[ -n "$active_run" ]]; then
+            gh run watch "$active_run" --exit-status
+            exit 0
+          fi
+
+          started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run publish.yml --ref main
+
+          run_id=''
+          for _ in {1..24}; do
+            run_id=$(gh run list \
+              --workflow publish.yml \
+              --commit "$main_sha" \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,createdAt \
+              --jq "map(select(.createdAt >= \"$started_at\"))[0].databaseId // empty")
+            [[ -n "$run_id" ]] && break
+            sleep 5
+          done
+          if [[ -z "$run_id" ]]; then
+            echo '::error::The dispatched publish workflow run was not found.'
+            exit 1
+          fi
+
+          gh run watch "$run_id" --exit-status
+          echo "Main $main_sha passed publish run $run_id." >> "$GITHUB_STEP_SUMMARY"

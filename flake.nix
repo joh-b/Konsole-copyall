@@ -101,7 +101,8 @@
             UPDATE_SCRIPT=${./scripts/update_nixos_stable.py} \
               python3 ${./tests/test-update-nixos-stable.py}
             python3 ${./tests/verify-nixos-maintenance.py} \
-              ${./renovate.json} \
+              ${./.github/dependabot.yml} \
+              ${./.github/workflows/dependabot-automerge.yml} \
               ${./.github/workflows/nixos-stable.yml} \
               ${./flake.nix} \
               ${./.github/workflows/compatibility.yml}

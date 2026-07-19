@@ -1,0 +1,99 @@
+name: Merge verified Dependabot lock update
+
+on:
+  workflow_run:
+    workflows:
+      - Check
+    types:
+      - completed
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nixpkgs-updates
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HEAD_SHA: ${{ github.event.workflow_run.pull_requests[0].head.sha }}
+      PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+    steps:
+      - name: Verify and merge the lock-only update
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo 'No pull request is associated with this Check run.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          metadata=$(gh pr view "$PR_NUMBER" \
+            --json author,baseRefName,files,headRefName,headRefOid,isDraft,state)
+          author=$(jq --raw-output '.author.login' <<< "$metadata")
+          base=$(jq --raw-output '.baseRefName' <<< "$metadata")
+          head=$(jq --raw-output '.headRefName' <<< "$metadata")
+          head_sha=$(jq --raw-output '.headRefOid' <<< "$metadata")
+          state=$(jq --raw-output '.state' <<< "$metadata")
+          draft=$(jq --raw-output '.isDraft' <<< "$metadata")
+          files=$(jq --compact-output '[.files[].path]' <<< "$metadata")
+
+          if [[ "$author" != 'dependabot[bot]' || "$base" != 'main' ||
+                "$head" != dependabot/nix/* || "$head_sha" != "$HEAD_SHA" ||
+                "$state" != 'OPEN' || "$draft" != 'false' ||
+                "$files" != '["flake.lock"]' ]]; then
+            echo "Check run ${{ github.event.workflow_run.id }} is not an eligible Dependabot Nix lock update." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          behind=$(
+            gh api "repos/$GITHUB_REPOSITORY/compare/main...$HEAD_SHA" --jq .behind_by
+          )
+          if [[ "$behind" != '0' ]]; then
+            echo "::error::The tested Dependabot head is behind current main; refusing a stale merge."
+            exit 1
+          fi
+
+          selected_version=$(
+            gh api "repos/$GITHUB_REPOSITORY/contents/flake.nix?ref=main" --jq .content \
+              | base64 --decode \
+              | sed -nE 's@.*github:NixOS/nixpkgs/nixos-([0-9]{2}\.(05|11)).*@\1@p'
+          )
+          lock=$(
+            gh api "repos/$GITHUB_REPOSITORY/contents/flake.lock?ref=$HEAD_SHA" --jq .content \
+              | base64 --decode
+          )
+          locked_ref=$(jq --exit-status --raw-output '.nodes.nixpkgs.original.ref' <<< "$lock")
+          if [[ ! "$selected_version" =~ ^[0-9]{2}\.(05|11)$ ||
+                "$locked_ref" != "nixos-$selected_version" ]]; then
+            echo "::error::Dependabot lock ref $locked_ref does not match current NixOS stable $selected_version."
+            exit 1
+          fi
+          if ! jq --exit-status '
+            .nodes.nixpkgs.original.type == "github" and
+            .nodes.nixpkgs.original.owner == "NixOS" and
+            .nodes.nixpkgs.original.repo == "nixpkgs" and
+            .nodes.nixpkgs.locked.type == "github" and
+            .nodes.nixpkgs.locked.owner == "NixOS" and
+            .nodes.nixpkgs.locked.repo == "nixpkgs"
+          ' <<< "$lock" > /dev/null; then
+            echo '::error::Dependabot changed the identity of the locked nixpkgs input.'
+            exit 1
+          fi
+
+          gh pr merge "$PR_NUMBER" \
+            --squash \
+            --delete-branch \
+            --match-head-commit "$HEAD_SHA"
+          gh workflow run publish.yml --ref main
+          echo "Merged verified Dependabot lock update in PR #$PR_NUMBER." \
+            >> "$GITHUB_STEP_SUMMARY"
