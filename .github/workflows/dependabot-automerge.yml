@@ -47,10 +47,12 @@ jobs:
           draft=$(jq --raw-output '.isDraft' <<< "$metadata")
           files=$(jq --compact-output '[.files[].path]' <<< "$metadata")
 
-          if [[ "$author" != 'dependabot[bot]' || "$base" != 'main' ||
+          if [[ ( "$author" != 'dependabot[bot]' && "$author" != 'app/dependabot' ) ||
+                "$base" != 'main' ||
                 "$head" != dependabot/nix/* || "$head_sha" != "$HEAD_SHA" ||
                 "$state" != 'OPEN' || "$draft" != 'false' ||
                 "$files" != '["flake.lock"]' ]]; then
+            echo "::notice::Skipped author=$author base=$base head=$head state=$state draft=$draft files=$files head_sha=$head_sha expected_sha=$HEAD_SHA"
             echo "Check run ${{ github.event.workflow_run.id }} is not an eligible Dependabot Nix lock update." \
               >> "$GITHUB_STEP_SUMMARY"
             exit 0

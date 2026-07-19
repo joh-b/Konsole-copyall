@@ -47,6 +47,7 @@ def verify_dependabot_merge(path: Path) -> None:
             "github.event.workflow_run.event == 'pull_request'",
             "GH_REPO: ${{ github.repository }}",
             "dependabot[bot]",
+            "app/dependabot",
             "dependabot/nix/*",
             "'[\"flake.lock\"]'",
             "compare/main...$HEAD_SHA",
