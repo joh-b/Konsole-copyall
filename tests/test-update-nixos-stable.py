@@ -2,12 +2,18 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
 import unittest
 
 
-SCRIPT = Path(__file__).parents[1] / "scripts/update_nixos_stable.py"
+SCRIPT = Path(
+    os.environ.get(
+        "UPDATE_SCRIPT",
+        Path(__file__).parents[1] / "scripts/update_nixos_stable.py",
+    )
+)
 SPEC = importlib.util.spec_from_file_location("update_nixos_stable", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

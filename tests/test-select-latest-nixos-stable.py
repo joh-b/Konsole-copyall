@@ -2,11 +2,17 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 import importlib.util
+import os
 from pathlib import Path
 import unittest
 
 
-SCRIPT = Path(__file__).parents[1] / "scripts/select_latest_nixos_stable.py"
+SCRIPT = Path(
+    os.environ.get(
+        "SELECTOR_SCRIPT",
+        Path(__file__).parents[1] / "scripts/select_latest_nixos_stable.py",
+    )
+)
 SPEC = importlib.util.spec_from_file_location("select_latest_nixos_stable", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

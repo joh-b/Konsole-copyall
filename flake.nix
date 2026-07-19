@@ -96,8 +96,10 @@
           nixos-maintenance = pkgs.runCommand "verify-nixos-stable-maintenance" {
             nativeBuildInputs = [ pkgs.python3 ];
           } ''
-            python3 ${./tests/test-select-latest-nixos-stable.py}
-            python3 ${./tests/test-update-nixos-stable.py}
+            SELECTOR_SCRIPT=${./scripts/select_latest_nixos_stable.py} \
+              python3 ${./tests/test-select-latest-nixos-stable.py}
+            UPDATE_SCRIPT=${./scripts/update_nixos_stable.py} \
+              python3 ${./tests/test-update-nixos-stable.py}
             python3 ${./tests/verify-nixos-maintenance.py} \
               ${./renovate.json} \
               ${./.github/workflows/nixos-stable.yml} \
