@@ -1,6 +1,7 @@
 {
   fetchurl,
   kdePackages,
+  libssh,
 }:
 
 let
@@ -31,6 +32,8 @@ kdePackages.konsole.overrideAttrs (oldAttrs: {
     ../patches/0001-add-copy-entire-scrollback-action.patch
     ../patches/0002-use-konsole-custom-identity.patch
   ];
+
+  buildInputs = (oldAttrs.buildInputs or [ ]) ++ [ libssh ];
 
   # A tracker update must fail instead of applying either downstream or
   # nixpkgs patches to merely similar source context.
