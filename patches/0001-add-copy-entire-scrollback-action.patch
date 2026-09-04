@@ -35,8 +35,7 @@ diff --git a/src/session/SessionController.cpp b/src/session/SessionController.c
 diff --git a/src/terminalDisplay/TerminalDisplay.cpp b/src/terminalDisplay/TerminalDisplay.cpp
 --- a/src/terminalDisplay/TerminalDisplay.cpp
 +++ b/src/terminalDisplay/TerminalDisplay.cpp
-@@ -2503,6 +2503,17 @@ void TerminalDisplay::copyToClipboard(Screen::DecodingOptions options)
-     QApplication::clipboard()->setMimeData(mimeData, QClipboard::Clipboard);
+@@ -2483,5 +2483,16 @@ void TerminalDisplay::copyToX11Selection(bool useSavedText)
  }
  
 +void TerminalDisplay::copyAllToClipboard()
@@ -50,9 +49,9 @@ diff --git a/src/terminalDisplay/TerminalDisplay.cpp b/src/terminalDisplay/Termi
 +    copyToClipboard();
 +}
 +
- void TerminalDisplay::pasteFromClipboard(bool appendEnter)
+ void TerminalDisplay::copyToClipboard(Screen::DecodingOptions options)
  {
-     QString text;
+     if (_screenWindow.isNull()) {
 diff --git a/src/terminalDisplay/TerminalDisplay.h b/src/terminalDisplay/TerminalDisplay.h
 --- a/src/terminalDisplay/TerminalDisplay.h
 +++ b/src/terminalDisplay/TerminalDisplay.h
