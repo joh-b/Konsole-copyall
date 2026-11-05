@@ -1,6 +1,6 @@
 {
-  "version": "26.08.2",
-  "tag": "v26.08.2",
-  "url": "https://download.kde.org/stable/release-service/26.08.2/src/konsole-26.08.2.tar.xz",
-  "hash": "sha256-IVSgOpUsKb5DXe//1MiPnS7/RKVc36M7Fqj8e/2Xghc="
+  "version": "26.08.3",
+  "tag": "v26.08.3",
+  "url": "https://download.kde.org/stable/release-service/26.08.3/src/konsole-26.08.3.tar.xz",
+  "hash": "sha256-MYnR0EgwD74GKOqwAbjqEb/W/k+2wLurx8WqBGHa1DA="
 }
